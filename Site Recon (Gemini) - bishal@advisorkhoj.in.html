@@ -1,0 +1,910 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Site Recon — URL Dossier Scanner</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+
+  :root{
+    --ink:#0D0B08;
+    --panel:#16130F;
+    --panel-alt:#1D1913;
+    --border:#332C22;
+    --border-soft:#2A241C;
+    --text:#EDE6D8;
+    --muted:#8C8577;
+    --amber:#E8A33D;
+    --amber-dim:#8A6528;
+    --teal:#3FA9A0;
+    --teal-dim:#2A6F69;
+    --red:#D65F5F;
+    --red-dim:#7A3535;
+  }
+
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--ink);color:var(--text);font-family:'IBM Plex Sans',sans-serif;}
+  body{padding:28px 20px 60px;}
+
+  .wrap{max-width:920px;margin:0 auto;}
+
+  .hero{
+    border-bottom:1px solid var(--border);
+    padding-bottom:20px;
+    margin-bottom:24px;
+    position:relative;
+    overflow:hidden;
+  }
+  .hero::after{
+    content:"";
+    position:absolute; inset:0;
+    background:repeating-linear-gradient(180deg, rgba(232,163,61,0.025) 0px, rgba(232,163,61,0.025) 1px, transparent 1px, transparent 3px);
+    pointer-events:none;
+  }
+  .eyebrow{
+    font-family:'Space Mono',monospace;
+    font-size:11px;
+    letter-spacing:2px;
+    color:var(--amber);
+    text-transform:uppercase;
+    margin:0 0 8px;
+  }
+  h1{
+    font-family:'Space Mono',monospace;
+    font-weight:700;
+    font-size:28px;
+    letter-spacing:-0.5px;
+    margin:0 0 6px;
+    color:var(--text);
+  }
+  .sub{
+    color:var(--muted);
+    font-size:14px;
+    margin:0;
+    max-width:560px;
+    line-height:1.6;
+  }
+
+  .scan-row{
+    display:flex;
+    gap:10px;
+    margin:22px 0 4px;
+  }
+  input[type=text]{
+    flex:1;
+    background:var(--panel);
+    border:1px solid var(--border);
+    color:var(--text);
+    font-family:'Space Mono',monospace;
+    font-size:14px;
+    padding:12px 14px;
+    border-radius:3px;
+    outline:none;
+  }
+  input[type=text]::placeholder{color:var(--muted);}
+  input[type=text]:focus{border-color:var(--amber);}
+
+  button{
+    font-family:'Space Mono',monospace;
+    font-size:13px;
+    letter-spacing:1px;
+    text-transform:uppercase;
+    background:var(--amber);
+    color:#241A06;
+    border:none;
+    padding:0 22px;
+    border-radius:3px;
+    cursor:pointer;
+    font-weight:700;
+  }
+  button:hover{background:#F0B354;}
+  button:disabled{background:var(--amber-dim);color:#4a3a1c;cursor:default;}
+
+  button.btn-stop {
+    background:var(--red);
+    color:#FFF;
+    display:none;
+  }
+  button.btn-stop:hover {
+    background:#E57373;
+  }
+
+  .note{
+    font-size:12px;
+    color:var(--muted);
+    margin:10px 0 0;
+    line-height:1.6;
+  }
+
+  .terminal{
+    margin-top:26px;
+    background:#0A0906;
+    border:1px solid var(--border);
+    border-radius:4px;
+    padding:14px 16px;
+    font-family:'Space Mono',monospace;
+    font-size:12.5px;
+    color:var(--teal);
+    min-height:40px;
+    display:none;
+  }
+  .terminal.active{display:block;}
+  .terminal .line{margin:2px 0; opacity:0; animation:fadein .25s forwards;}
+  .terminal .line.err{color:var(--red);}
+  .terminal .line.ok{color:var(--amber);}
+  .cursor{display:inline-block;width:7px;height:13px;background:var(--teal);animation:blink 1s steps(1) infinite;vertical-align:-2px;}
+  @keyframes blink{50%{opacity:0;}}
+  @keyframes fadein{to{opacity:1;}}
+
+  .results{margin-top:28px;display:none;}
+  .results.active{display:block;}
+
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;}
+  @media (max-width:640px){.grid{grid-template-columns:1fr;}}
+
+  .card{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:4px;
+    padding:16px 18px;
+    position:relative;
+  }
+  .card-title{
+    font-family:'Space Mono',monospace;
+    font-size:11px;
+    letter-spacing:1.5px;
+    text-transform:uppercase;
+    color:var(--muted);
+    margin:0 0 12px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+  }
+  .stamp{
+    font-family:'Space Mono',monospace;
+    font-size:10px;
+    letter-spacing:1px;
+    padding:2px 8px;
+    border-radius:2px;
+    border:1px solid;
+  }
+  .stamp.found{color:var(--teal);border-color:var(--teal-dim);}
+  .stamp.missing{color:var(--muted);border-color:var(--border-soft);}
+
+  .kv{display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px solid var(--border-soft);font-size:13px;}
+  .kv:last-child{border-bottom:none;}
+  .kv .k{color:var(--muted);}
+  .kv .v{font-family:'Space Mono',monospace;color:var(--text);text-align:right;}
+
+  .list-card{grid-column:1/-1;}
+  .chip-group{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px;}
+  .chip{
+    font-family:'Space Mono',monospace;
+    font-size:12.5px;
+    background:var(--panel-alt);
+    border:1px solid var(--border-soft);
+    color:var(--text);
+    padding:5px 10px;
+    border-radius:3px;
+  }
+  .empty-chip{color:var(--muted);font-size:12.5px;font-style:normal;}
+
+  .fieldnote{
+    margin-top:22px;
+    background:var(--panel-alt);
+    border-left:2px solid var(--amber-dim);
+    padding:12px 16px;
+    font-size:12px;
+    color:var(--muted);
+    line-height:1.7;
+    border-radius:0 3px 3px 0;
+  }
+  .fieldnote b{color:var(--amber);}
+
+  .section-label{
+    font-family:'Space Mono',monospace;
+    font-size:10px;
+    letter-spacing:1.5px;
+    color:var(--muted);
+    text-transform:uppercase;
+    margin:0 0 6px;
+  }
+
+  .divider{
+    display:flex;
+    align-items:center;
+    gap:12px;
+    margin:34px 0 16px;
+  }
+  .divider::before, .divider::after{
+    content:"";
+    flex:1;
+    height:1px;
+    background:var(--border);
+  }
+  .divider span{
+    font-family:'Space Mono',monospace;
+    font-size:11px;
+    letter-spacing:2px;
+    text-transform:uppercase;
+    color:var(--amber);
+  }
+
+  .bulk-row{
+    display:flex;
+    gap:10px;
+    align-items:center;
+  }
+  input[type=file]{
+    flex:1;
+    background:var(--panel);
+    border:1px solid var(--border);
+    color:var(--muted);
+    font-family:'IBM Plex Sans',sans-serif;
+    font-size:13px;
+    padding:9px 12px;
+    border-radius:3px;
+  }
+  input[type=file]::file-selector-button{
+    font-family:'Space Mono',monospace;
+    font-size:11px;
+    text-transform:uppercase;
+    letter-spacing:1px;
+    background:var(--panel-alt);
+    color:var(--text);
+    border:1px solid var(--border-soft);
+    border-radius:3px;
+    padding:6px 10px;
+    margin-right:10px;
+    cursor:pointer;
+  }
+  .bulk-progress{
+    font-family:'Space Mono',monospace;
+    font-size:12px;
+    color:var(--teal);
+    margin-top:12px;
+    min-height:16px;
+  }
+
+  .copyright{
+    text-align:right;
+    font-size:10px;
+    color:var(--muted);
+    opacity:0.55;
+    margin-top:48px;
+    font-family:'Space Mono',monospace;
+    letter-spacing:0.5px;
+  }
+
+  .download-row{
+    margin-top:4px;
+  }
+  #downloadSingleBtn{
+    display:none;
+    background:transparent;
+    border:1px solid var(--teal-dim);
+    color:var(--teal);
+  }
+  #downloadSingleBtn:hover{
+    background:var(--panel-alt);
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="hero">
+    <p class="eyebrow">Case file // domain &amp; contact recon</p>
+    <h1>Site Recon</h1>
+    <p class="sub">Drop a URL. It pulls domain registration dates, hunts the page for ARN numbers, phone numbers, and email addresses.</p>
+  </div>
+
+  <div class="scan-row">
+    <input type="text" id="urlInput" placeholder="e.g. advisorkhoj.com" />
+    <button id="scanBtn" onclick="runScan()">Scan</button>
+  </div>
+  <p class="note">Works best on server-rendered pages. Some sites block cross-origin fetches — if a scan comes back empty, that's the site's own protection, not a bug.</p>
+
+  <div class="divider"><span>Bulk search</span></div>
+  <div class="bulk-row">
+    <input type="file" id="bulkFile" accept=".xlsx,.xls,.csv" />
+    <button id="bulkBtn" onclick="runBulkScan()">Run bulk search</button>
+    <button id="stopBulkBtn" class="btn-stop" onclick="stopBulkScan()">Stop &amp; Download</button>
+  </div>
+  <p class="note">Upload an Excel or CSV file with one website URL per row (first column). Every site gets scanned in order and a report downloads automatically: <b style="color:var(--text)">Domain URL, ARN(s), Purchased, Expiry, Registrar, Email(s), Phone Number(s)</b> — same row order as your file.</p>
+  <div class="bulk-progress" id="bulkProgress"></div>
+
+  <div class="terminal" id="terminal"></div>
+
+  <div class="results" id="results">
+
+    <div class="grid">
+      <div class="card">
+        <p class="card-title">Domain registration <span class="stamp" id="domainStamp">—</span></p>
+        <div class="kv"><span class="k">Domain</span><span class="v" id="domainName">—</span></div>
+        <div class="kv"><span class="k">Purchased</span><span class="v" id="domainCreated">—</span></div>
+        <div class="kv"><span class="k">Expires</span><span class="v" id="domainExpiry">—</span></div>
+        <div class="kv"><span class="k">Registrar</span><span class="v" id="domainRegistrar">—</span></div>
+      </div>
+
+      <div class="card">
+        <p class="card-title">Scan status <span class="stamp" id="pageStamp">—</span></p>
+        <div class="kv"><span class="k">Page fetched</span><span class="v" id="pageFetched">—</span></div>
+        <div class="kv"><span class="k">HTML size</span><span class="v" id="pageSize">—</span></div>
+        <div class="kv"><span class="k">Footer found</span><span class="v" id="footerFound">—</span></div>
+      </div>
+    </div>
+
+    <div class="grid">
+      <div class="card list-card">
+        <p class="card-title">ARN numbers <span class="stamp" id="arnStamp">—</span></p>
+        <div class="chip-group" id="arnList"></div>
+      </div>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <p class="card-title">Phone numbers <span class="stamp" id="phoneStamp">—</span></p>
+        <div class="chip-group" id="phoneList"></div>
+      </div>
+      <div class="card">
+        <p class="card-title">Email addresses <span class="stamp" id="emailStamp">—</span></p>
+        <div class="chip-group" id="emailList"></div>
+      </div>
+    </div>
+
+    <div class="fieldnote">
+      <b>Field notes.</b> WHOIS/RDAP data can be hidden by privacy proxies (common for many registrars) — a blank registration date usually means privacy protection, not a failed scan. Contact details are pulled from the homepage plus the site's own contact page when one is found, so content injected by JavaScript after load may still be missed. ARN detection looks for the pattern "ARN" followed by a code, standard for AMFI-registered mutual fund distributors in India.
+    </div>
+
+    <div class="download-row">
+      <button id="downloadSingleBtn" onclick="downloadSingleReport()">Download report (.xlsx)</button>
+    </div>
+
+  </div>
+
+  <div class="copyright">© bishal@advisorkhoj.in</div>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+let lastSingleResult = null;
+let isBulkStopping = false;
+
+const PROXIES = [
+  {name: 'codetabs',   build: (u) => 'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(u)},
+  {name: 'allorigins', build: (u) => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u)},
+  {name: 'jina-reader', build: (u) => 'https://r.jina.ai/' + u},
+  {name: 'corsproxy.io', build: (u) => 'https://corsproxy.io/?url=' + encodeURIComponent(u)},
+  {name: 'thingproxy', build: (u) => 'https://thingproxy.freeboard.io/fetch/' + u}
+];
+
+function log(msg, cls){
+  const term = document.getElementById('terminal');
+  term.classList.add('active');
+  const line = document.createElement('div');
+  line.className = 'line' + (cls ? ' ' + cls : '');
+  line.textContent = '> ' + msg;
+  term.appendChild(line);
+  term.scrollTop = term.scrollHeight;
+}
+
+function normalizeUrl(raw){
+  raw = raw.trim();
+  if(!/^https?:\/\//i.test(raw)) raw = 'https://' + raw;
+  return raw;
+}
+
+async function fetchWithProxies(targetUrl){
+  let lastErrorReason = 'CORS/Fetch Blocked or Timed Out';
+  for(const proxy of PROXIES){
+    try{
+      const proxied = proxy.build(targetUrl);
+      const res = await fetch(proxied, {signal: AbortSignal.timeout(15000)});
+      if(res.ok){
+        const text = await res.text();
+        if(text && text.length > 20){
+          log(proxy.name + ': ok (' + res.status + ')', 'ok');
+          return { text, error: null };
+        }
+        log(proxy.name + ': empty response', 'err');
+        lastErrorReason = 'Empty response from proxy';
+      } else {
+        log(proxy.name + ': HTTP ' + res.status, 'err');
+        lastErrorReason = 'HTTP ' + res.status + ' ' + res.statusText;
+      }
+    }catch(e){
+      const reason = e.name === 'TimeoutError' ? 'timed out' : (e.message || 'network error');
+      log(proxy.name + ': ' + reason, 'err');
+      lastErrorReason = reason;
+    }
+  }
+  return { text: null, error: lastErrorReason };
+}
+
+async function fetchRdap(domain){
+  log('querying registry (RDAP) for ' + domain + '...');
+  const direct = 'https://rdap.org/domain/' + domain;
+  try{
+    const res = await fetch(direct, {signal: AbortSignal.timeout(9000)});
+    if(res.ok){
+      const json = await res.json();
+      return json;
+    }
+  }catch(e){ /* fall through to proxy */ }
+
+  const resProxy = await fetchWithProxies(direct);
+  if(resProxy.text){
+    try{ return JSON.parse(resProxy.text); }catch(e){ return null; }
+  }
+  return null;
+}
+
+function parseRdapDates(rdap){
+  let created = null, expiry = null, registrar = null;
+  if(rdap && Array.isArray(rdap.events)){
+    for(const ev of rdap.events){
+      const action = (ev.eventAction || '').toLowerCase();
+      if(action === 'registration') created = ev.eventDate;
+      if(action === 'expiration') expiry = ev.eventDate;
+    }
+  }
+  if(rdap && Array.isArray(rdap.entities)){
+    for(const ent of rdap.entities){
+      if(ent.roles && ent.roles.includes('registrar')){
+        if(ent.vcardArray && ent.vcardArray[1]){
+          const fn = ent.vcardArray[1].find(v => v[0] === 'fn');
+          if(fn) registrar = fn[3];
+        }
+      }
+    }
+  }
+  return {created, expiry, registrar};
+}
+
+function fmtDate(iso){
+  if(!iso) return null;
+  try{
+    const d = new Date(iso);
+    return d.toLocaleDateString('en-IN', {year:'numeric', month:'short', day:'numeric'});
+  }catch(e){ return iso; }
+}
+
+function extractEmails(html){
+  const re = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
+  const found = html.match(re) || [];
+  const bad = /\.(png|jpg|jpeg|gif|svg|webp|css|js)$/i;
+  const clean = [...new Set(found.filter(e => !bad.test(e) && e.length < 60))];
+  return clean.slice(0, 15);
+}
+
+function extractPhones(html){
+  const textOnly = html.replace(/<[^>]+>/g, ' ');
+  const re = /(?:\+?\d{1,3}[\s.-]?)?(?:\(?\d{2,5}\)?[\s.-]?){2,4}\d{2,4}/g;
+  const found = textOnly.match(re) || [];
+  const results = new Set();
+  for(let raw of found){
+    const digits = raw.replace(/\D/g, '');
+    if(digits.length >= 10 && digits.length <= 13){
+      results.add(raw.trim());
+    }
+  }
+  return [...results].slice(0, 15);
+}
+
+function extractArns(html){
+  const textOnly = html.replace(/<[^>]+>/g, ' ');
+  const re = /\bARN\b[\s.:\-]{0,4}(?:no\.?|number|regn\.?\s*no\.?)?[\s.:\-]{0,4}([A-Za-z0-9]{3,15})/gi;
+  const results = new Set();
+  let m;
+  while((m = re.exec(textOnly)) !== null){
+    const code = m[1].toUpperCase();
+    if(/^\d{3,}$/.test(code) || /^[A-Z0-9]{3,}$/.test(code)){
+      results.add('ARN-' + code);
+    }
+  }
+  return [...results].slice(0, 10);
+}
+
+function getFooterHtml(html){
+  const m = html.match(/<footer[\s\S]*?<\/footer>/i);
+  return m ? m[0] : null;
+}
+
+function findContactLink(html, baseUrl){
+  const hrefRe = /href=["']([^"'#][^"']*)["']/gi;
+  const keywords = /contact|get-?in-?touch|reach-?us|connect-?with-?us|enquir/i;
+  const skip = /\.(png|jpg|jpeg|gif|svg|webp|css|js|pdf)(\?|$)/i;
+  const candidates = [];
+  let m;
+  while((m = hrefRe.exec(html)) !== null){
+    const href = m[1];
+    if(keywords.test(href) && !skip.test(href) && !href.toLowerCase().startsWith('mailto:') && !href.toLowerCase().startsWith('tel:')){
+      candidates.push(href);
+    }
+  }
+  if(candidates.length === 0) return null;
+  candidates.sort((a, b) => a.length - b.length);
+  try{
+    return new URL(candidates[0], baseUrl).href;
+  }catch(e){
+    return null;
+  }
+}
+
+function mergeUnique(a, b, limit){
+  const merged = [...new Set([...(a || []), ...(b || [])])];
+  return limit ? merged.slice(0, limit) : merged;
+}
+
+async function collectSiteData(url, homepageHtml){
+  const footer = getFooterHtml(homepageHtml);
+  let arns = extractArns(footer || homepageHtml);
+  let phones = extractPhones(homepageHtml);
+  let emails = extractEmails(homepageHtml);
+
+  const contactUrl = findContactLink(homepageHtml, url);
+  let contactChecked = false;
+  if(contactUrl && contactUrl.replace(/\/$/, '') !== url.replace(/\/$/, '')){
+    log('checking contact page: ' + contactUrl);
+    const contactRes = await fetchWithProxies(contactUrl);
+    if(contactRes.text){
+      contactChecked = true;
+      log('contact page retrieved (' + Math.round(contactRes.text.length / 1024) + ' KB)', 'ok');
+      arns = mergeUnique(arns, extractArns(contactRes.text), 10);
+      phones = mergeUnique(phones, extractPhones(contactRes.text), 15);
+      emails = mergeUnique(emails, extractEmails(contactRes.text), 15);
+    } else {
+      log('could not retrieve contact page', 'err');
+    }
+  } else {
+    log('no separate contact page link found on the site');
+  }
+
+  return {arns, phones, emails, footer, contactChecked};
+}
+
+function renderChips(containerId, items, emptyText){
+  const el = document.getElementById(containerId);
+  el.innerHTML = '';
+  if(!items || items.length === 0){
+    const span = document.createElement('span');
+    span.className = 'empty-chip';
+    span.textContent = emptyText;
+    el.appendChild(span);
+    return;
+  }
+  for(const item of items){
+    const chip = document.createElement('span');
+    chip.className = 'chip';
+    chip.textContent = item;
+    el.appendChild(chip);
+  }
+}
+
+function setStamp(id, found){
+  const el = document.getElementById(id);
+  el.textContent = found ? 'found' : 'none';
+  el.className = 'stamp ' + (found ? 'found' : 'missing');
+}
+
+async function runScan(){
+  const input = document.getElementById('urlInput').value;
+  if(!input.trim()) return;
+
+  const btn = document.getElementById('scanBtn');
+  btn.disabled = true;
+  btn.textContent = 'Scanning...';
+
+  const term = document.getElementById('terminal');
+  term.innerHTML = '';
+  document.getElementById('results').classList.remove('active');
+  document.getElementById('downloadSingleBtn').style.display = 'none';
+  lastSingleResult = null;
+
+  const url = normalizeUrl(input);
+  let domain;
+  try{
+    domain = new URL(url).hostname.replace(/^www\./, '');
+  }catch(e){
+    log('invalid URL — try something like advisorkhoj.com', 'err');
+    btn.disabled = false;
+    btn.textContent = 'Scan';
+    return;
+  }
+
+  log('target locked: ' + domain);
+
+  // RDAP / WHOIS
+  const rdap = await fetchRdap(domain);
+  const dates = parseRdapDates(rdap);
+  if(dates.created || dates.expiry){
+    log('registry record retrieved', 'ok');
+  } else {
+    log('registry lookup returned no dates (privacy-protected or unsupported TLD)', 'err');
+  }
+
+  document.getElementById('domainName').textContent = domain;
+  document.getElementById('domainCreated').textContent = fmtDate(dates.created) || 'not disclosed';
+  document.getElementById('domainExpiry').textContent = fmtDate(dates.expiry) || 'not disclosed';
+  document.getElementById('domainRegistrar').textContent = dates.registrar || 'unknown';
+  setStamp('domainStamp', !!(dates.created || dates.expiry));
+
+  // Page fetch
+  log('fetching page source (trying ' + PROXIES.length + ' sources)...');
+  const pageRes = await fetchWithProxies(url);
+
+  if(!pageRes.text){
+    log('could not retrieve page HTML — ' + pageRes.error, 'err');
+    document.getElementById('pageFetched').textContent = 'failed';
+    document.getElementById('pageSize').textContent = '—';
+    document.getElementById('footerFound').textContent = '—';
+    setStamp('pageStamp', false);
+    renderChips('arnList', [], 'no data — page fetch failed');
+    renderChips('phoneList', [], 'no data — page fetch failed');
+    renderChips('emailList', [], 'no data — page fetch failed');
+    setStamp('arnStamp', false);
+    setStamp('phoneStamp', false);
+    setStamp('emailStamp', false);
+
+    lastSingleResult = {
+      domain,
+      arns: [],
+      createdFmt: fmtDate(dates.created) || 'not disclosed',
+      expiryFmt: fmtDate(dates.expiry) || 'not disclosed',
+      registrar: dates.registrar || 'unknown',
+      emails: [],
+      phones: []
+    };
+    document.getElementById('downloadSingleBtn').style.display = 'inline-block';
+
+    document.getElementById('results').classList.add('active');
+    btn.disabled = false;
+    btn.textContent = 'Scan';
+    return;
+  }
+
+  const html = pageRes.text;
+  log('page retrieved (' + Math.round(html.length/1024) + ' KB)', 'ok');
+  document.getElementById('pageFetched').textContent = 'yes';
+  document.getElementById('pageSize').textContent = Math.round(html.length/1024) + ' KB';
+  setStamp('pageStamp', true);
+
+  const collected = await collectSiteData(url, html);
+  document.getElementById('footerFound').textContent = collected.footer ? 'yes' : 'no <footer> tag';
+
+  const arns = collected.arns;
+  log(arns.length ? arns.length + ' ARN code(s) found' : 'no ARN codes found', arns.length ? 'ok' : null);
+  renderChips('arnList', arns, 'none found on the page');
+  setStamp('arnStamp', arns.length > 0);
+
+  const phones = collected.phones;
+  log(phones.length ? phones.length + ' phone number(s) found (site + contact page)' : 'no phone numbers found', phones.length ? 'ok' : null);
+  renderChips('phoneList', phones, 'none found on the page');
+  setStamp('phoneStamp', phones.length > 0);
+
+  const emails = collected.emails;
+  log(emails.length ? emails.length + ' email address(es) found (site + contact page)' : 'no email addresses found', emails.length ? 'ok' : null);
+  renderChips('emailList', emails, 'none found on the page');
+  setStamp('emailStamp', emails.length > 0);
+
+  log('scan complete.', 'ok');
+
+  lastSingleResult = {
+    domain,
+    arns,
+    createdFmt: fmtDate(dates.created) || 'not disclosed',
+    expiryFmt: fmtDate(dates.expiry) || 'not disclosed',
+    registrar: dates.registrar || 'unknown',
+    emails,
+    phones
+  };
+  document.getElementById('downloadSingleBtn').style.display = 'inline-block';
+
+  document.getElementById('results').classList.add('active');
+  btn.disabled = false;
+  btn.textContent = 'Scan';
+}
+
+document.getElementById('urlInput').addEventListener('keydown', function(e){
+  if(e.key === 'Enter') runScan();
+});
+
+async function scanForBulk(rawUrl){
+  const url = normalizeUrl(rawUrl);
+  let domain;
+  try{
+    domain = new URL(url).hostname.replace(/^www\./, '');
+  }catch(e){
+    log('invalid URL: ' + rawUrl, 'err');
+    return { success: false, url: rawUrl, domain: rawUrl, reason: 'Invalid URL format' };
+  }
+
+  const rdap = await fetchRdap(domain);
+  const dates = parseRdapDates(rdap);
+
+  const pageRes = await fetchWithProxies(url);
+  if(!pageRes.text){
+    log('page fetch failed for ' + domain, 'err');
+    return {
+      success: false,
+      url: rawUrl,
+      domain: domain,
+      reason: 'Unable to fetch page (' + pageRes.error + ')'
+    };
+  }
+
+  const collected = await collectSiteData(url, pageRes.text);
+  return {
+    success: true,
+    url: domain,
+    arns: collected.arns,
+    created: dates.created,
+    expiry: dates.expiry,
+    registrar: dates.registrar,
+    emails: collected.emails,
+    phones: collected.phones
+  };
+}
+
+function readUploadedUrls(file){
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try{
+        const data = new Uint8Array(e.target.result);
+        const wb = XLSX.read(data, {type: 'array'});
+        const sheet = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(sheet, {header: 1});
+        const urls = [];
+        for(const row of rows){
+          const cell = row[0];
+          if(cell === undefined || cell === null) continue;
+          const val = String(cell).trim();
+          if(!val) continue;
+          if(/^(url|website|domain|link|site|company)s?$/i.test(val)) continue;
+          urls.push(val);
+        }
+        resolve(urls);
+      }catch(err){
+        reject(err);
+      }
+    };
+    reader.onerror = () => reject(new Error('file read failed'));
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+function stopBulkScan(){
+  isBulkStopping = true;
+  log('stop signal received. Wrapping up current site and generating report...', 'err');
+}
+
+async function runBulkScan(){
+  const fileInput = document.getElementById('bulkFile');
+  const file = fileInput.files[0];
+  if(!file){
+    alert('Choose an Excel or CSV file first.');
+    return;
+  }
+
+  const btn = document.getElementById('bulkBtn');
+  const stopBtn = document.getElementById('stopBulkBtn');
+  btn.disabled = true;
+  btn.textContent = 'Processing...';
+  stopBtn.style.display = 'inline-block';
+  stopBtn.disabled = false;
+
+  isBulkStopping = false;
+
+  const progressEl = document.getElementById('bulkProgress');
+  progressEl.textContent = '';
+  const term = document.getElementById('terminal');
+  term.innerHTML = '';
+  term.classList.add('active');
+  document.getElementById('results').classList.remove('active');
+
+  let urls;
+  try{
+    urls = await readUploadedUrls(file);
+  }catch(e){
+    log('could not read uploaded file — make sure it is a valid .xlsx or .csv', 'err');
+    btn.disabled = false;
+    btn.textContent = 'Run bulk search';
+    stopBtn.style.display = 'none';
+    return;
+  }
+
+  if(urls.length === 0){
+    log('no URLs found in the uploaded file', 'err');
+    btn.disabled = false;
+    btn.textContent = 'Run bulk search';
+    stopBtn.style.display = 'none';
+    return;
+  }
+
+  log('loaded ' + urls.length + ' URL(s) from file', 'ok');
+  const successRows = [];
+  const failedRows = [];
+
+  for(let i = 0; i < urls.length; i++){
+    if(isBulkStopping){
+      log('bulk process stopped by user.', 'err');
+      break;
+    }
+
+    const raw = urls[i];
+    progressEl.textContent = 'scanning ' + (i + 1) + ' of ' + urls.length + ': ' + raw;
+    log('[' + (i + 1) + '/' + urls.length + '] scanning ' + raw + '...');
+    const r = await scanForBulk(raw);
+
+    if(r.success){
+      successRows.push([
+        r.url,
+        r.arns.join(', '),
+        fmtDate(r.created) || 'not disclosed',
+        fmtDate(r.expiry) || 'not disclosed',
+        r.registrar || 'unknown',
+        r.emails.join(', '),
+        r.phones.join(', ')
+      ]);
+    } else {
+      failedRows.push([
+        r.url,
+        r.reason
+      ]);
+    }
+  }
+
+  log('generating excel report with sheets...', 'ok');
+
+  const wb = XLSX.utils.book_new();
+
+  // Scanned Results Sheet
+  const successHeader = ['Domain URL', 'ARN(s)', 'Purchased', 'Expiry', 'Registrar', 'Email(s)', 'Phone Number(s)'];
+  const wsSuccess = XLSX.utils.aoa_to_sheet([successHeader, ...successRows]);
+  wsSuccess['!cols'] = [{wch: 28}, {wch: 22}, {wch: 14}, {wch: 14}, {wch: 22}, {wch: 32}, {wch: 26}];
+  XLSX.utils.book_append_sheet(wb, wsSuccess, 'Scanned Results');
+
+  // Failed URLs Sheet
+  const failedHeader = ['Domain / URL', 'Failure Reason'];
+  const wsFailed = XLSX.utils.aoa_to_sheet([failedHeader, ...failedRows]);
+  wsFailed['!cols'] = [{wch: 35}, {wch: 45}];
+  XLSX.utils.book_append_sheet(wb, wsFailed, 'Failed URLs');
+
+  XLSX.writeFile(wb, 'site-recon-report.xlsx');
+
+  const statusMsg = isBulkStopping ? 'stopped by user' : 'completed';
+  progressEl.textContent = 'done (' + statusMsg + ') — report downloaded (' + successRows.length + ' succeeded, ' + failedRows.length + ' failed)';
+  log('report downloaded: site-recon-report.xlsx', 'ok');
+
+  btn.disabled = false;
+  btn.textContent = 'Run bulk search';
+  stopBtn.style.display = 'none';
+}
+
+function downloadSingleReport(){
+  if(!lastSingleResult){
+    alert('Run a scan first.');
+    return;
+  }
+  const header = ['Domain URL', 'ARN(s)', 'Purchased', 'Expiry', 'Registrar', 'Email(s)', 'Phone Number(s)'];
+  const row = [
+    lastSingleResult.domain,
+    lastSingleResult.arns.join(', '),
+    lastSingleResult.createdFmt,
+    lastSingleResult.expiryFmt,
+    lastSingleResult.registrar,
+    lastSingleResult.emails.join(', '),
+    lastSingleResult.phones.join(', ')
+  ];
+  const ws = XLSX.utils.aoa_to_sheet([header, row]);
+  ws['!cols'] = [{wch: 28}, {wch: 22}, {wch: 14}, {wch: 14}, {wch: 22}, {wch: 32}, {wch: 26}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Site Recon Report');
+  XLSX.writeFile(wb, lastSingleResult.domain + '-report.xlsx');
+}
+</script>
+</body>
+</html>
